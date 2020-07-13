@@ -134,6 +134,7 @@ class Log(Cog):
             aroles = [r.mention for r in after.roles]
             added = set(aroles) - set(broles) or set('---')
             removed = set(broles) - set(aroles) or set('---')
+
             embed = self.create_log_embed("Roles Update",
                                           after.id,
                                           color=after.color,

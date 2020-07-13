@@ -4,7 +4,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 DB_PATH = "./data/db/database.sqlite3"
 BUILD_PATH = "./data/db/build.sql"
-UPGRADE_PATH = "./data/db/upgrade.sql"
+UPGRADE_PATH = "./data/db/upgrades"
 cxn = connect(DB_PATH, check_same_thread=False)
 cur = cxn.cursor()
 
@@ -17,6 +17,20 @@ def with_commit(func):
     return inner
 
 
+def get_db_version():
+    version = field("PRAGMA user_version")
+    if version:
+        return version
+    else:
+        return 0
+
+
+def version_increment(version=None):
+    if version is None:
+        version = get_db_version()
+    execute(f"PRAGMA user_version = {version + 1}")
+
+
 @with_commit
 def build():
     if isfile(BUILD_PATH):
@@ -24,9 +38,14 @@ def build():
 
 
 @with_commit
-def upgrade():
-    if isfile(UPGRADE_PATH):
-        scriptexec(UPGRADE_PATH)
+def upgrade(version):
+    upgrade_file = f"{UPGRADE_PATH}/upgrade_{version}.sql"
+    if isfile(upgrade_file):
+        scriptexec(upgrade_file)
+        version_increment(version)
+        print(f"db upgraded to version:{version}")
+    else:
+        print(f"db version:{version}")
 
 
 def commit():

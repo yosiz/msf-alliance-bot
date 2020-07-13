@@ -20,7 +20,12 @@ IGNORE_EXCEPTIONS = (CommandNotFound, BadArgument)
 
 
 def get_guild_prefix(message: Message):
-    return db.field("SELECT Prefix FROM guilds WHERE GuildID = ?", message.guild.id)
+    prefix = db.field("SELECT Prefix FROM guilds WHERE GuildID = ?", message.guild.id)
+    if prefix:
+        return prefix
+    else:
+        db.execute("INSERT INTO guilds (GuildID,Prefix) VALUES (?, ?)", message.guild.id, "+")
+        return "+"
 
 
 def get_prefix(bot, message: Message):
@@ -63,6 +68,26 @@ class Bot(BotBase):
         for cog in COGS:
             print(f"loading cog: {cog}")
             self.load_extension(f"lib.cogs.{cog}")
+
+    def update_db(self):
+        db.multiexec("INSERT OR IGNORE INTO guilds (GuildID) VALUES (?)",
+                     ((guild.id,) for guild in self.guilds))
+
+        db.multiexec("INSERT OR IGNORE INTO exp (UserID, GuildID) VALUES(?, ?)",
+                     ((member.id, member.guild.id) for guild in self.guilds for member in guild.members if
+                      not member.bot))
+
+        # remove members that left - not in any guild
+        to_remove = []
+        stored_members = db.column("SELECT UserID from exp")
+        for id_ in stored_members:
+            if not any((guild.get_member(id_) for guild in self.guilds)):
+                to_remove.append(id_)
+        if len(to_remove):
+            db.multiexec("DELETE FROM exp WHERE UserID = ?",
+                         ((id_ for id_ in to_remove)))
+
+        db.commit()
 
     def run(self, name, version):
         self.VERSION = version
@@ -108,6 +133,8 @@ class Bot(BotBase):
                 await ctx.send("no permission to perform the action")
             else:
                 raise exc.original
+        elif isinstance(exc, ValueError):
+            await ctx.send(f"invalid value provided for '{ctx.command.name}' command.")
         else:
             raise exc
 
@@ -116,30 +143,17 @@ class Bot(BotBase):
             self.guild = self.get_guild(543413299841073152)
             self.scheduler.add_job(self.rules_reminder, CronTrigger(day_of_week=0, hour=12, minute=0, second=0))
             self.scheduler.start()
-            # # send message to a channel
-            # channel = self.get_channel(543413299841073154)
-            # embed = Embed(title=f"bot online", description=f"version {self.VERSION}",
-            #               color=0x3322FF, timestamp=datetime.utcnow())
-            # embed.set_footer(text="this is the footer")
-            # embed.set_author(name="By Me",
-            #                  icon_url=self.guild.icon_url)
-            # # icon_url='https://discord.com/assets/0e291f67c9274a1abdddeb3fd919cbaa.png')
-            # fields = [("name", "value", False),
-            #           ("field2", "value2", True),
-            #           ("field3", "value3", True),
-            #           ]
-            # embed.add_field(name="version", value=self.VERSION, inline=False)
-            # for name, value, inline in fields:
-            #     embed.add_field(name=name, value=value, inline=inline)
-            # await channel.send(f"bot online (ver:{self.VERSION}")
-            # await channel.send(embed=embed)
-            # await channel.send(file=File("./data/images/hedionism_bot.png"))
+            self.update_db()
 
+            # await channel.send(file=File("./data/images/hedionism_bot.png"))
             while not self.cogs_ready.all_ready():
                 await asyncio.sleep(0.1)
             self.ready = True
             await self.notify(f"Bot '{self.NAME}' is online (version: {self.VERSION})")
             print("bot ready")
+            await self.get_cog("Log").log_msg(f"{self.VERSION} I'm Alive! servicing {len(self.guilds):,} guild(s).")
+            await self.get_cog("Meta").set()
+
         else:
             print("bot reconnected")
 
