@@ -1,17 +1,17 @@
+import asyncio
+import os
+from glob import glob
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from discord import DMChannel
+from discord import Message
+from discord.errors import Forbidden
 from discord.ext.commands import Bot as BotBase, BotMissingPermissions, MissingPermissions
 from discord.ext.commands import CommandNotFound, BadArgument, MissingRequiredArgument, CommandOnCooldown
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from discord import Embed, File, DMChannel
-from discord.errors import HTTPException, Forbidden
-from datetime import datetime
-from discord import Message
-from discord.ext.commands import Context, when_mentioned_or, command, has_permissions
+from discord.ext.commands import Context, when_mentioned_or
 
-from apscheduler.triggers.cron import CronTrigger
-from glob import glob
 from ..db import db
-import os
-import asyncio
 
 OWNER_IDS = []
 BOT_MSG_CHANNEL = 543413299841073154
@@ -93,8 +93,11 @@ class Bot(BotBase):
         self.VERSION = version
         self.NAME = name
         self.setup()
-        with open("./lib/bot/token.0", "r", encoding="utf-8") as tkn:
-            self.TOKEN = tkn.read()
+        if os.path.exists('./lib/bot/token.0'):
+            with open("./lib/bot/token.0", "r", encoding="utf-8") as tkn:
+                self.TOKEN = tkn.read()
+        else:
+            self.TOKEN = os.environ['TOKEN']
         print("running bot...")
         super().run(self.TOKEN, reconnect=True)
 
